@@ -69,6 +69,9 @@ bool Client::alive() {
 }
 
 Client::~Client() {
+    if(cacheState == CACHE_READ && Cache::getCache()->get(url) != NULL) {
+        Cache::getCache()->get(url)->readFinish();
+    }
 	delete remote;
 	delete client;
 }
@@ -156,7 +159,16 @@ void Client::continueRemote(pollfd * ufds) {
 			Cache::getCache()->put(url, remote->getBuffer(), remote->getAvaliable());
 			if(!remote->isOpen()) {
 				Cache::getCache()->get(url)->setFinished();
+                return;
 			}
+            if(client == NULL || !client->isOpen()) {
+                remote->resetAvaliable();
+                if(!Cache::getCache()->get(url)->isReaded()) {
+                    remote->closeSocket();
+                    Cache::getCache()->remove(url);
+                    std::cout<<"remove cache "<<url<<std::endl;
+                }
+            }
 		}
 	}
 }
@@ -281,6 +293,7 @@ void Client::connectToRemote(const std::string &headStr) {
 	if(Cache::getCache()->get(url) != NULL) {
 		cacheState = CACHE_READ;
 		std::cout<<"route to cache"<<std::endl;
+        Cache::getCache()->get(url)->readStart();
 		return ;
 	}
 

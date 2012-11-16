@@ -6,6 +6,7 @@
 class CacheEntry {
 private:
 	bool finished;
+    int readerCount;
 	std::string data;
 public:
 	CacheEntry();
@@ -14,6 +15,9 @@ public:
 	size_t getLength() const;
 	void setFinished();
 	bool isFinished() const;
+    void readStart();
+    void readFinish();
+    bool isReaded();
 };
 
 #endif // CACHEENTRY_H

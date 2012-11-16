@@ -1,6 +1,6 @@
 #include "cacheentry.h"
 
-CacheEntry::CacheEntry() : finished(false) {
+CacheEntry::CacheEntry() : finished(false), readerCount(0) {
 
 }
 
@@ -22,4 +22,18 @@ void CacheEntry::setFinished() {
 
 bool CacheEntry::isFinished() const {
 	return finished;
+}
+
+void CacheEntry::readStart() {
+    ++readerCount;
+}
+
+void CacheEntry::readFinish() {
+    if(readerCount > 0) {
+        --readerCount;
+    }
+}
+
+bool CacheEntry::isReaded() {
+    return readerCount > 0;
 }

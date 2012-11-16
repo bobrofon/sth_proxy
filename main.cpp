@@ -18,6 +18,8 @@ void signalHandler(int sig) {
 using namespace std;
 
 int main() {
+    sigset(SIGINT, signalHandler);
+    sighold(SIGPIPE);
 	proxy = new Proxy(5555);
 	if (proxy) {
 		if (proxy->isListen())
