@@ -13,21 +13,21 @@
 #include "cache.h"
 #include "client.h"
 
-static const std::string ERROR_MESSAGE_502 = "HTTP/1.0 502 Bad Gateway\r\n \
-		\r\n<html><head><title>502 Bad Gateway</title></head> \
-		<body><h2>502 Bad Gateway</h2><h3>Host not found or connection failed.</h3></body></html>\r\n";
-static const std::string ERROR_MESSAGE_505 = "HTTP/1.0 505 HTTP Version not supported\r\n \
-		\r\n<html><head><title>505 HTTP Version not supported</title></head> \
-		<body><h2>505 HTTP Version not supported</h2><h3>Proxy server does not support the HTTP protocol version used in the request.</h3></body></html>\r\n";
-static const std::string ERROR_MESSAGE_405 = "HTTP/1.0 405 Method Not Allowed\r\n \
-		\r\n<html><head><title>405 Method Not Allowed</title></head> \
-		<body><h2>405 Method Not Allowed</h2><h3>Proxy server does not support the HTTP method used in the request.</h3></body></html>\r\n";
-static const std::string ERROR_MESSAGE_414 = "HTTP/1.0 414 Request-URL Too Long\r\n \
-		\r\n<html><head><title>414 Request-URL Too Long</title></head> \
-		<body><h2>414 Request-URL Too Long</h2><h3>The URL provided was too long for the server to process.</h3></body></html>\r\n";
-static const std::string ERROR_MESSAGE_500 = "HTTP/1.0 500 Internal Server Error\r\n \
-		\r\n<html><head><title>500 Internal Server Error</title></head> \
-		<body><h2>500 Internal Server Error</h2></body></html>\r\n";
+static const std::string ERROR_MESSAGE_502 = "HTTP/1.0 502 Bad Gateway\r\n\
+\r\n<html><head><title>502 Bad Gateway</title></head> \
+<body><h2>502 Bad Gateway</h2><h3>Host not found or connection failed.</h3></body></html>\r\n";
+static const std::string ERROR_MESSAGE_505 = "HTTP/1.0 505 HTTP Version not supported\r\n\
+\r\n<html><head><title>505 HTTP Version not supported</title></head> \
+<body><h2>505 HTTP Version not supported</h2><h3>Proxy server does not support the HTTP protocol version used in the request.</h3></body></html>\r\n";
+static const std::string ERROR_MESSAGE_405 = "HTTP/1.0 405 Method Not Allowed\r\n\
+\r\n<html><head><title>405 Method Not Allowed</title></head> \
+<body><h2>405 Method Not Allowed</h2><h3>Proxy server does not support the HTTP method used in the request.</h3></body></html>\r\n";
+static const std::string ERROR_MESSAGE_414 = "HTTP/1.0 414 Request-URL Too Long\r\n\
+\r\n<html><head><title>414 Request-URL Too Long</title></head> \
+<body><h2>414 Request-URL Too Long</h2><h3>The URL provided was too long for the server to process.</h3></body></html>\r\n";
+static const std::string ERROR_MESSAGE_500 = "HTTP/1.0 500 Internal Server Error\r\n\
+\r\n<html><head><title>500 Internal Server Error</title></head> \
+<body><h2>500 Internal Server Error</h2></body></html>\r\n";
 static const std::string SUPPORT_VERSION = "HTTP/1.0";
 
 Client::Client(Connection *conn) : client(conn), remote(NULL) {
@@ -38,6 +38,9 @@ Client::Client(Connection *conn) : client(conn), remote(NULL) {
 		return;
 	}
 	errorState = OK;
+	contentLen = -1;
+	recvedLen = 0;
+	headerLen = 0;
 }
 
 bool Client::alive() {
@@ -97,7 +100,7 @@ void Client::continueClient(pollfd * ufds) {
 	short revent = ufds->revents;
 	CacheEntry *cache = Cache::getCache()->get(url);
 
-	if( revent & (POLLIN | POLLOUT) == 0) {
+	if( (revent & (POLLIN | POLLOUT)) == 0) {
 		client->closeSocket();
 		return ;
 	}
@@ -119,10 +122,13 @@ void Client::continueClient(pollfd * ufds) {
 	}
 	if(revent & POLLIN) {
 		client->recvData();
+		if(strstr(client->getBuffer(), "GET http://www.linux.org.ru/news/hardware/8497632")) {
+			int i = 5;
+		}
 		if(cacheState == CACHE_NO_SET && remote == NULL && url.empty() && errorState == OK) {
 			connectToRemote(client->getBuffer());
 			if(remote != NULL) {
-				client->catBuf();
+				//client->catBuf();
 			}
 		}
 	}
@@ -131,18 +137,27 @@ void Client::continueClient(pollfd * ufds) {
 void Client::continueRemote(pollfd * ufds) {
 	short revent = ufds->revents;
 
-	if( revent & (POLLIN | POLLOUT) == 0) {
+	if( (revent & (POLLIN | POLLOUT)) == 0) {
 		remote->closeSocket();
 		return ;
 	}
 	if(revent & POLLOUT) {
+		if(cacheState == CACHE_NO_SET && headStart) {
+			std::cerr<<client->getBuffer()<<std::endl;
+			client->setAvaliable(processHeaderCL(client->getBuffer(), client->getAvaliable()));
+			std::cerr<<client->getBuffer()<<std::endl;
+		}
 		remote->sendData(client->getBuffer(), client->getAvaliable());
 		remote->resetWritten();
 		client->resetAvaliable();
 	}
 	if(revent & POLLIN) {
-		remote->recvData();
+		int tmpr = remote->recvData();
+		if(tmpr > 0) {
+			recvedLen += tmpr;
+		}
 		if(cacheState == CACHE_NO_SET && headStart) {
+			std::cerr<<remote->getBuffer()<<std::endl;
 			headStart = false;
 			std::stringstream ss;
 			remote->getBuffer()[7] = '0';
@@ -150,10 +165,15 @@ void Client::continueRemote(pollfd * ufds) {
 			std::string protocol;
 			int code = 0;
 			ss>>protocol>>code;
-			if(protocol.compare("HTTP/1.0") == 0 && code == 200) {
-				cacheState = CACHE_WRITE;
-				//std::cout<<remote->getBuffer()<<std::endl;
+			if(/*protocol.compare("HTTP/1.0") == 0 && */code == 200 && processHeader(remote->getBuffer()) == 0) {
+				if(contentLen >= 0 && contentLen <= 5*1024*1024) {
+					cacheState = CACHE_WRITE;
+				}
+				recvedLen -= headerLen;
 			}
+		}
+		if(contentLen >= 0 && contentLen <= recvedLen) {
+			remote->closeSocket();
 		}
 		if(cacheState == CACHE_WRITE) {
 			Cache::getCache()->put(url, remote->getBuffer(), remote->getAvaliable());
@@ -282,6 +302,7 @@ void Client::connectToRemote(const std::string &headStr) {
 	if(method.compare("GET") != 0 && method.compare("HEAD") != 0) {
 		errorState = UNSUPPORTED_METHOD;
 		cacheState = CACHE_NO_SET;
+		std::cout<<method<<std::endl;
 		return;
 	}
 	if(version.compare(SUPPORT_VERSION) != 0)  {
@@ -370,4 +391,54 @@ void Client::clientError() {
 		return ;
 	}
 	client->forceClose();
+}
+
+int Client::processHeader(char *header) {
+	char *endStr = strstr(header, "\r\n\r\n");
+	if(endStr == NULL) {
+		return -1;
+	}
+	endStr += 4;
+	headerLen = endStr - header;
+	char *lenStr = strstr(header, "Content-Length: ");
+	if(lenStr != NULL) {
+		lenStr += 16;
+		contentLen = atoi(lenStr);
+	}
+	return 0;
+}
+
+int Client::processHeaderCL(char *header, size_t len) {
+	//{
+	char *startUrl = strstr(header, "http://");
+	if(startUrl == NULL) {
+		return len;
+	}
+	char *endUrl = strstr(startUrl, " ");
+	if(endUrl == NULL) {
+		return len;
+	}
+	char *startUri = strstr(startUrl + strlen("http://"), "/");
+	if(startUri == NULL) {
+		startUrl[0] = '/';
+		memmove(startUrl+1, endUrl, len - (endUrl - header));
+		len -= endUrl - startUrl - 1;
+	} else {
+		memmove(startUrl, startUri, len - (startUri - header));
+		len -= startUri - startUrl;
+	}
+	//header[len] = 0;
+	//}
+	char *ad = "Proxy-Connection:";
+	char *end = strstr(header, ad);
+	if(end == NULL) {
+		return len;
+	}
+	char *end2 = strstr(end, "\r\n");
+	if(end2 == NULL) {
+		return len;
+	}
+	end2 += 2;
+	memmove(end, end2, len - (end2 - header));
+	return len - (end2 - end);
 }

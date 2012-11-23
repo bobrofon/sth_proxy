@@ -16,8 +16,13 @@ private:
 	std::string url;
 	CacheState cacheState;
 	ErrorState errorState;
+	int contentLen;
+	int recvedLen;
+	int headerLen;
 	bool headStart;
 
+	int processHeader(char *header);
+	int processHeaderCL(char *header, size_t len);
 	void connectToRemote(const std::string &headStr);
 	void processRequest(const std::string &headStr, std::string &method, std::string &protocol, std::string &version, std::string &url, int &port);
 public:

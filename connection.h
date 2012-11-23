@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define BUFSIZE (64*1024)
+#define BUFSIZE (2*1024*1024)
 
 class Connection {
 private:
@@ -20,6 +20,7 @@ public:
 	ssize_t sendData(const char *data, size_t len);
 	size_t getAvaliable() const;
 	size_t getWritten() const;
+	void setAvaliable(size_t len);
 	bool isOpen() const;
 	char *getBuffer();
 	void resetWritten();

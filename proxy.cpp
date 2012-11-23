@@ -69,14 +69,14 @@ void Proxy::loop() {
 			std::cout<<"pool error"<<std::endl;
 			continue;
 		}
-		std::cout<<"listen socket : "<<listen_socket<<" ("<<pollC[0].fd<<") event: "<<pollC[0].events<<std::endl;
+		//std::cout<<"listen socket : "<<listen_socket<<" ("<<pollC[0].fd<<") event: "<<pollC[0].events<<std::endl;
 		if(pollC[0].revents & POLLIN) {
-			std::cout<<"new accept"<<std::endl;
+			//std::cout<<"new accept"<<std::endl;
 			acceptClient();
 		}
 		for(int i = 1; i < pollLen; ++i) {
 			if(pollC[i].revents != 0) {
-				std::cout<<"event on socket "<<pollC[i].fd<<std::endl;
+				//std::cout<<"event on socket "<<pollC[i].fd<<std::endl;
 				route[pollC[i].fd]->continueWork(pollC + i);
 			}
 		}
@@ -95,6 +95,9 @@ void Proxy::preparePoll() {
 		Client *proxyClient = *it;
 
 		if(!proxyClient->alive()) {
+			if(proxyClient->getURL() == "http://img.lenta.ru/_img/motor/b-motor/logo.png") {
+				int i = 0;
+			}
 			it = clients.erase(it);
 			std::cout<<"delete client : "<<proxyClient->getURL()<<std::endl;
 			delete proxyClient;
@@ -112,7 +115,7 @@ void Proxy::preparePoll() {
 		}
 		++it;
 	}
-	std::cout<<"client count: "<<clients.size()<<std::endl;
+	//std::cout<<"client count: "<<clients.size()<<std::endl;
 }
 
 void Proxy::acceptClient() {
